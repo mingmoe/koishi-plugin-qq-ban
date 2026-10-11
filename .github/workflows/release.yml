@@ -1,0 +1,152 @@
+name: Release (docs-driven)
+
+# 文档驱动的发布流程：
+# 仅当 docs/vX.Y.Z.md 发生变更时触发。版本号取自文件名（不再每次推送自动 bump），
+# GitHub Release 的描述内容取自对应文档文件。
+#
+# 本工作流只做「发版」：自动 bump package.json 的 version、发布到 npm、创建同名 Release，
+# 然后把 bump 提交推回 main。不包含任何服务器部署。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/v*.md'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '要发布的版本号，例如 v0.1.1，需对应一个已存在的 docs/vX.Y.Z.md 文件'
+        required: false
+
+# 防止同一分支并发运行导致 git push / release 创建冲突。
+# 用 cancel-in-progress: false（排队而非取消），避免中止一个正在进行中的发布。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # 拉取全部 tag，供历史版本的 commit 查找使用
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Process version docs
+        env:
+          VERSION_INPUT: ${{ github.event.inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          REPO="${GITHUB_REPOSITORY}"
+          API="https://api.github.com/repos/$REPO"
+          AUTH="Authorization: Bearer $GH_TOKEN"
+          PKG="koishi-plugin-qq-ban"
+
+          # 解析本次要处理的 docs 文件
+          if [ -n "${VERSION_INPUT:-}" ]; then
+            # 校验输入版本对应的文档是否存在，避免静默失败
+            if [ ! -f "docs/$VERSION_INPUT.md" ]; then
+              echo "::error::docs/$VERSION_INPUT.md does not exist"
+              exit 1
+            fi
+            FILES="docs/$VERSION_INPUT.md"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            FILES=$(git ls-files 'docs/v*.md')
+          elif [ -z "$BEFORE_SHA" ] || [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            # 分支首次推送时 before 是全 0，git diff 不可用，退化为处理全部 docs 文件
+            FILES=$(git ls-files 'docs/v*.md')
+          else
+            FILES=$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA" -- 'docs/v*.md' || true)
+          fi
+
+          echo "Processing files: $FILES"
+          BUMPED=""
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "current package.json version: $CURRENT"
+
+          # 更可靠地查找历史版本对应的 commit：
+          # 优先用 git tag（最准确），回退到 commit message grep，最后用当前 SHA。
+          get_tag_commit() {
+            local ver=$1
+            local commit
+            commit=$(git rev-list -1 "v$ver" 2>/dev/null || true)
+            if [ -z "$commit" ]; then
+              commit=$(git log --all --grep="bump to $ver" --format=%H | head -1)
+            fi
+            echo "${commit:-$GITHUB_SHA}"
+          }
+
+          # 把 package.json 的 version 写成传入的版本号
+          set_version() {
+            node -e "const fs=require('fs');const p='./package.json';const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')" "$1"
+          }
+
+          for f in $FILES; do
+            [ -f "$f" ] || { echo "::warning::skip missing file $f"; continue; }
+            VER=${f#docs/v}
+            VER=${VER%.md}
+            echo "--- handling v$VER ---"
+
+            RELID=$(curl -s -H "$AUTH" -H "Accept: application/vnd.github+json" "$API/releases/tags/v$VER" \
+              | /usr/bin/python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('id',''))" 2>/dev/null)
+
+            if [ -n "$RELID" ]; then
+              echo "release exists -> PATCH description"
+              # 已存在的 Release 只同步描述，不重新发布、不重新 bump
+              PAYLOAD=$(/usr/bin/python3 -c "import json,sys;print(json.dumps({'body':open(sys.argv[1]).read()}))" "$f")
+              curl -sf -X PATCH -H "$AUTH" -H "Content-Type: application/json" -H "Accept: application/vnd.github+json" \
+                --data "$PAYLOAD" "$API/releases/$RELID" >/dev/null
+            else
+              IS_NEWER=$(printf '%s\n%s\n' "$VER" "$CURRENT" | sort -V | tail -1)
+              if [ "$IS_NEWER" = "$VER" ] && [ "$VER" != "$CURRENT" ]; then
+                echo "FORWARD release -> publish + create release"
+                # 幂等：若 npm 上已存在该版本则跳过 publish，避免重跑时因版本不可覆盖而失败
+                if npm view "$PKG@$VER" version >/dev/null 2>&1; then
+                  echo "npm $PKG@$VER already published, skip publish"
+                else
+                  set_version "$VER"
+                  npm publish
+                fi
+                set_version "$VER"
+                PAYLOAD=$(/usr/bin/python3 -c "import json,sys;print(json.dumps({'tag_name':'v'+sys.argv[1],'name':'v'+sys.argv[1],'body':open(sys.argv[2]).read()}))" "$VER" "$f")
+                curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" -H "Accept: application/vnd.github+json" \
+                  --data "$PAYLOAD" "$API/releases" >/dev/null
+                BUMPED="$VER"
+              else
+                echo "historical release (<= current) -> create at historical commit only"
+                TAG_COMMIT=$(get_tag_commit "$VER")
+                PAYLOAD=$(/usr/bin/python3 -c "import json,sys;print(json.dumps({'tag_name':'v'+sys.argv[1],'name':'v'+sys.argv[1],'body':open(sys.argv[2]).read(),'target_commitish':sys.argv[3]}))" "$VER" "$f" "$TAG_COMMIT")
+                curl -sf -X POST -H "$AUTH" -H "Content-Type: application/json" -H "Accept: application/vnd.github+json" \
+                  --data "$PAYLOAD" "$API/releases" >/dev/null
+              fi
+            fi
+          done
+
+          # 发版后把 bump 提交推回 main
+          if [ -n "$BUMPED" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore(release): bump to v$BUMPED" || echo "nothing to commit"
+            # 并发排队场景下确保基于最新 main 再推送
+            git pull --rebase origin main || true
+            git push
+          fi

@@ -1,0 +1,3 @@
+# 仅在本机手动 `npm publish` 到 npm 官方源时需要。
+# CI 里的发布走仓库 secret `NPM_TOKEN`（见 .github/workflows/release.yml），不读这个文件。
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}

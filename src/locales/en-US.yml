@@ -1,0 +1,42 @@
+commands:
+  ban:
+    description: Mute a group member
+    usage: |-
+      Mute the given group member. The bot needs to be an administrator of the group.
+      The duration accepts common English and Chinese forms, and segments add up,
+      e.g. 600 (seconds), 10m, 1h30m, 1 hour and 30 minutes, 2 days.
+      Requests longer than the platform limit are capped at that limit.
+    examples: |-
+      ban @someone 10m
+      ban @someone 600
+      ban @someone 1h30m
+      ban @someone 1 day
+    arguments:
+      target: The member to mute, you can simply @ them
+      duration: Mute duration, e.g. 600 / 10m / 1h30m / 1 day
+  unban:
+    description: Unmute a group member
+    usage: Lift the mute of the given group member.
+    examples: |-
+      unban @someone
+    arguments:
+      target: The member to unmute, you can simply @ them
+
+qq-ban:
+  language-name: English
+  not-in-group: This command can only be used in a group.
+  need-target: Please @ the member to operate on, or provide a user ID directly.
+  cannot-ban-self: You cannot do this to yourself.
+  cannot-ban-bot: You cannot do this to the bot.
+  unsupported-adapter: The current adapter does not provide a mute interface. Please make sure a QQ official bot adapter with group mute support (e.g. adapter-qq-crack) is enabled.
+  missing-duration: 'Please provide a duration, e.g. `10m`, `1h30m` or `1 day`.'
+  invalid-duration: 'Unrecognized duration: {input}. Try `600` (seconds), `10m`, `1h30m`, `1 hour and 30 minutes` or `1 day`.'
+  mute-failed: 'Failed to mute: {reason}'
+  unmute-failed: 'Failed to unmute: {reason}'
+  banned: ' has been muted for {duration}.'
+  unbanned: ' has been unmuted.'
+  duration-day: '{count} day(s)'
+  duration-hour: '{count} hour(s)'
+  duration-minute: '{count} minute(s)'
+  duration-second: '{count} second(s)'
+  duration-capped: ' (exceeds the platform limit, capped at the maximum)'

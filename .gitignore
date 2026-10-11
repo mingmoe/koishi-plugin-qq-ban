@@ -1,0 +1,15 @@
+node_modules/
+.DS_Store
+*.tgz
+.npmrc
+npm-cache/
+.npm-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.*
+.workbuddy/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+yakumo.yml

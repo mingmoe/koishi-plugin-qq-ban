@@ -1,0 +1,42 @@
+commands:
+  ban:
+    description: 禁言群成员
+    usage: |-
+      禁言指定的群成员。需要机器人已经拥有该群的管理员权限。
+      时长支持中英文常见写法与多段累加，例如 600（秒）、10分钟、1小时30分、1d2h、1 day。
+      超出平台允许的最长禁言时长时，按最长时长处理。
+    examples: |-
+      ban @某人 10分钟
+      ban @某人 600
+      ban @某人 1小时30分
+      ban @某人 2h
+      ban @某人 1 day
+    arguments:
+      target: 要禁言的成员，可以直接 @ 该成员
+      duration: 禁言时长，如 600 / 10分钟 / 1h30m / 1 day
+  unban:
+    description: 解除群成员禁言
+    usage: 解除指定群成员的禁言。
+    examples: |-
+      unban @某人
+    arguments:
+      target: 要解禁的成员，可以直接 @ 该成员
+
+qq-ban:
+  language-name: 简体中文
+  not-in-group: 该指令只能在群聊中使用。
+  need-target: 请 @ 要操作的对象，或直接提供用户 ID。
+  cannot-ban-self: 不能对自己执行这个操作。
+  cannot-ban-bot: 不能对机器人执行这个操作。
+  unsupported-adapter: 当前适配器没有提供禁言接口，请确认已启用支持群禁言的 QQ 官方机器人适配器（如 adapter-qq-crack）。
+  missing-duration: '请提供禁言时长，例如 `10分钟`、`1h30m`、`1 day`。'
+  invalid-duration: '无法识别的时长：{input}。可以写 `600`（秒）、`10分钟`、`1小时30分`、`2h`、`1 day` 这类写法。'
+  mute-failed: '禁言失败：{reason}'
+  unmute-failed: '解除禁言失败：{reason}'
+  banned: ' 已被禁言，时长 {duration}。'
+  unbanned: ' 的禁言已解除。'
+  duration-day: '{count} 天'
+  duration-hour: '{count} 小时'
+  duration-minute: '{count} 分钟'
+  duration-second: '{count} 秒'
+  duration-capped: '（超出平台上限，已按最长时长处理）'
