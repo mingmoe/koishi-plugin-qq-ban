@@ -25,13 +25,16 @@ concurrency:
 
 permissions:
   contents: write
+  # 可信发布（Trusted Publishing）：用 id-token 向 npm 换取一次性发布凭证
+  id-token: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # 注意：绝不要设置 NODE_AUTH_TOKEN。只要该变量存在（即使是空字符串），
+      # npm 就会走 token 认证而不会回落到 OIDC 可信发布。
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,8 +47,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          registry-url: https://registry.npmjs.org
+          # 可信发布要求 npm >= 11.5.1，Node 24 自带的 npm 满足
+          node-version: 24
+          # 不设 registry-url：它会写入含 ${NODE_AUTH_TOKEN} 的 .npmrc，反而破坏 OIDC
 
       - name: Process version docs
         env:
