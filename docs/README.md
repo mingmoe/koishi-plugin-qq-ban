@@ -42,9 +42,28 @@ npm 侧的配置：包设置页 → **Trusted Publisher** → GitHub Actions，�
 | Environment name | 留空 |
 | Allowed actions | 必须勾选允许直接 `npm publish`。只允许 stage publish 的话，CI 无法直接发布（那条路需要人工审批） |
 
+也可以不走网页，用 CLI 一条命令建（需要交互完成 2FA）：
+
+```bash
+npx npm@latest trust github koishi-plugin-qq-ban \
+  --repo mingmoe/koishi-plugin-qq-ban \
+  --file release.yml \
+  --allow-publish \
+  --registry=https://registry.npmjs.org
+```
+
+查看已配置的关系（同样需要 2FA）：
+
+```bash
+npx npm@latest trust list koishi-plugin-qq-ban --registry=https://registry.npmjs.org
+```
+
 ⚠️ **配置有 48 小时验证窗口**：新建的可信发布配置必须在 48 小时内成功发布一次，
 否则会被判为未验证而失效，需要删除后重建。所以配好后尽快发一个版本验证。
 另外，提供方与仓库/工作流字段一旦创建就固定，改动只能删掉重建。
+
+⚠️ `Workflow filename` 必须**只写文件名**。填成 `.github/workflows/release.yml` 是最常见的错法，
+看上去配好了但永远匹配不上，CI 发布时报 `ENEEDAUTH`。
 
 ## 首次发布（bootstrap）
 
